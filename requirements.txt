@@ -5,3 +5,5 @@ drf-yasg==1.21.11
 django-debug-toolbar==6.1.0
 psycopg2-binary==2.9.11
 redis==7.0.1
+django-redis==5.4.0
+python-dotenv

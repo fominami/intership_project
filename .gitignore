@@ -1,2 +1,8 @@
 src/venv
 src/mainproject/__pycache__
+.env
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
