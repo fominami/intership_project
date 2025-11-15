@@ -1,11 +1,24 @@
 repos:
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.1.6
+  - repo: local
     hooks:
-      - id: ruff
-        args: [--fix]
-      
-        name: Run ruff linter (via make)
-      
+      - id: ruff-lint
+        name: Run ruff linter
+        entry: ruff check --fix .
+        language: system
+        pass_filenames: false
+        always_run: true
+
       - id: ruff-format
-        name: Run ruff formatter (via make)
+        name: Run ruff formatter
+        entry: ruff format .
+        language: system
+        pass_filenames: false
+        always_run: true
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.4.0
+    hooks:
+      - id: check-ast
+      - id: check-yaml
+      - id: end-of-file-fixer
+      - id: trailing-whitespace

@@ -2,20 +2,19 @@ from datetime import timedelta
 from pathlib import Path
 import os
 from dotenv import load_dotenv
+import environ
 
 load_dotenv()
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
+env = environ.Env()
 BASE_DIR = Path(__file__).resolve().parent.parent
-
+environ.Env.read_env(os.path.join(BASE_DIR, ".env"))
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.0/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv("SECRET_KEY")
-
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv("DEBUG", "False").lower() == "true"
+SECRET_KEY = env("SECRET_KEY")
+DEBUG = env.bool("DEBUG", default=False)
 
 ALLOWED_HOSTS = ["*"]
 
@@ -74,17 +73,17 @@ WSGI_APPLICATION = "mainproject.wsgi.application"
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
-        "NAME": os.getenv("DB_NAME"),
-        "USER": os.getenv("DB_USER"),
-        "PASSWORD": os.getenv("DB_PASSWORD"),
-        "HOST": os.getenv("DB_HOST"),
-        "PORT": os.getenv("DB_PORT", "5432"),
+        "NAME": env("DB_NAME"),
+        "USER": env("DB_USER"),
+        "PASSWORD": env("DB_PASSWORD"),
+        "HOST": env("DB_HOST"),
+        "PORT": env.int("DB_PORT", default=5432),
     }
 }
 CACHES = {
     "default": {
         "BACKEND": "django_redis.cache.RedisCache",
-        "LOCATION": os.getenv("REDIS_URL"),
+        "LOCATION": env("REDIS_URL"),
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
         },
@@ -116,13 +115,12 @@ REST_FRAMEWORK = {
 }
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(
-        minutes=int(os.getenv("ACCESS_TOKEN_LIFETIME", 60))
+        minutes=env.int("ACCESS_TOKEN_LIFETIME", default=60)  # ← добавить default=
     ),
     "REFRESH_TOKEN_LIFETIME": timedelta(
-        minutes=int(os.getenv("REFRESH_TOKEN_LIFETIME", 1440))
+        minutes=env.int("REFRESH_TOKEN_LIFETIME", default=1440)  # ← добавить default=
     ),
 }
-
 # Debug Toolbar
 INTERNAL_IPS = [
     "127.0.0.1",
@@ -130,16 +128,11 @@ INTERNAL_IPS = [
 # Internationalization
 # https://docs.djangoproject.com/en/5.0/topics/i18n/
 
-LANGUAGE_CODE = os.getenv("LANGUAGE_CODE", "en-us")
-
-TIME_ZONE = os.getenv("TIME_ZONE", "UTC")
-
-USE_I18N = os.getenv("USE_I18N", "True").lower() == "true"
-
-USE_TZ = os.getenv("USE_TZ", "True").lower() == "true"
-
-STATIC_URL = os.getenv("STATIC_URL", "static/")
-
+LANGUAGE_CODE = env("LANGUAGE_CODE", default="en-us")
+TIME_ZONE = env("TIME_ZONE", default="UTC")
+USE_I18N = env.bool("USE_I18N", default=True)
+USE_TZ = env.bool("USE_TZ", default=True)
+STATIC_URL = env("STATIC_URL", default="static/")
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.0/ref/settings/#default-auto-field
 
