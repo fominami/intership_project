@@ -1,8 +1,10 @@
-src/venv
-src/mainproject/__pycache__
+.git
+.gitignore
 .env
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 .Python
+venv/
+*.sqlite3
