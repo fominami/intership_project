@@ -26,7 +26,7 @@ class Supplier(Base):
         # limit_choices_to={'role': User.Role.SUPPLIER}
     )
     name = models.CharField(max_length=250)
-    foundation_year = models.DateField(
+    foundation_date = models.DateField(
         validators=[MaxValueValidator(datetime.date.today())]
     )
     cars = models.ManyToManyField(
