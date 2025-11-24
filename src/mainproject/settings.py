@@ -32,7 +32,14 @@ INSTALLED_APPS = [
     "rest_framework_simplejwt",
     "drf_yasg",
     "debug_toolbar",
-    "api",
+    "accounts",
+    "common",
+    "cars",
+    "clients",
+    "deals",
+    "promotions",
+    "salons",
+    "suppliers",
 ]
 
 MIDDLEWARE = [
@@ -137,3 +144,4 @@ STATIC_URL = env("STATIC_URL", default="static/")
 # https://docs.djangoproject.com/en/5.0/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+AUTH_USER_MODEL = "accounts.User"
