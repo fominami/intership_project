@@ -1,5 +1,5 @@
 import django_filters
-from .models import User
+from accounts.models import User
 
 
 class UserFilter(django_filters.FilterSet):

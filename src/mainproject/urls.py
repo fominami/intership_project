@@ -47,7 +47,12 @@ urlpatterns = [
     # JWT endpoints
     path("api/token/", TokenObtainPairView.as_view(), name="token_obtain_pair"),
     path("api/token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
-    # Our API app
+    # Our API
     path("api/", include("salons.urls")),
     path("api/accounts/", include("accounts.urls")),
+    path("api/cars/", include("cars.urls")),
+    path("api/clients/", include("clients.urls")),
+    path("api/suppliers/", include("suppliers.urls")),
+    path("api/promotions/", include("promotions.urls")),
+    path("api/deals/", include("deals.urls")),
 ]
