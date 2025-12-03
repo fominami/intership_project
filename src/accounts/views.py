@@ -1,32 +1,61 @@
-from rest_framework import viewsets, mixins, permissions
+from rest_framework import viewsets, mixins, status
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+
+from accounts.serializers import (
+    ProfileSerializer,
+    ProfileUpdateSerializer,
+    PublicUserSerializer,
+)
 from accounts.models import User
-from accounts.serializers import UserSerializer
-from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework import filters
-from accounts.filters import UserFilter
 
 
-class UserViewSet(
-    mixins.ListModelMixin,
-    mixins.CreateModelMixin,
-    mixins.RetrieveModelMixin,
-    mixins.UpdateModelMixin,
-    viewsets.GenericViewSet,
+class ProfileViewSet(viewsets.GenericViewSet):
+    permission_classes = [IsAuthenticated]
+    serializer_class = ProfileSerializer
+
+    def get_object(self):
+        return self.request.user
+
+    def retrieve(self, request):
+        serializer = ProfileSerializer(request.user)
+        return Response(serializer.data)
+
+    def update(self, request):
+        serializer = ProfileUpdateSerializer(
+            request.user, data=request.data, partial=False
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
+
+    def partial_update(self, request):
+        serializer = ProfileUpdateSerializer(
+            request.user, data=request.data, partial=True
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
+
+    def destroy(self, request):
+        user = request.user
+        user.is_active = False
+        user.save()
+        return Response(
+            {"status": "Ваш аккаунт деактивирован"}, status=status.HTTP_204_NO_CONTENT
+        )
+
+
+class PublicUserViewSet(
+    mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet
 ):
-    queryset = User.objects.all()
-    serializer_class = UserSerializer
+    queryset = User.objects.filter(is_active=True)
+    permission_classes = [IsAuthenticated]
+    serializer_class = PublicUserSerializer
 
-    def get_permissions(self):
-        if self.action == "update":
-            return [permissions.IsAdminUser()]
-        return [permissions.AllowAny()]
-
-    filter_backends = [
-        DjangoFilterBackend,
-        filters.SearchFilter,
-        filters.OrderingFilter,
-    ]
-    filterset_class = UserFilter
-    search_fields = ("username", "email", "first_name", "last_name")
-    ordering_fields = ("username", "last_name")
-    ordering = "username"
+    def get_queryset(self):
+        return (
+            User.objects.filter(is_active=True)
+            .exclude(id=self.request.user.id)
+            .order_by("username")
+        )
