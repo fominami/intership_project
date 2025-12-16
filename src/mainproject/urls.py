@@ -5,12 +5,11 @@ from drf_yasg.views import get_schema_view
 from drf_yasg import openapi
 from rest_framework import permissions
 
-# Настройки для drf-yasg
 schema_view = get_schema_view(
     openapi.Info(
-        title="Internship Project API",
+        title="Internship API",
         default_version="v1",
-        description="API for internship project",
+        description="API для стажировки",
     ),
     public=True,
     permission_classes=(permissions.AllowAny,),
