@@ -17,15 +17,17 @@ urlpatterns = [
     path(
         "profile/stats/",
         views.ProfileViewSet.as_view({"get": "stats"}),
-        name="profile-stats",
+        name="profile_stats",
     ),
     path(
-        "", views.PublicUserViewSet.as_view({"get": "list"}), name="public-users-list"
+        "",
+        views.PublicUserViewSet.as_view({"get": "list"}),
+        name="public_users_list",  # ✅ snake_case
     ),
     path(
         "<int:pk>/",
         views.PublicUserViewSet.as_view({"get": "retrieve"}),
-        name="public-user-detail",
+        name="public_user_detail",
     ),
     path("register/", views.RegisterView.as_view(), name="register"),
     path("confirm-email/<str:token>/", views.confirm_email, name="confirm_email"),
@@ -39,17 +41,5 @@ urlpatterns = [
         "reset-password/<uidb64>/<token>/",
         views.reset_password_confirm,
         name="reset_password_confirm",
-    ),
-    path("update-profile/", views.UpdateProfileView.as_view(), name="update_profile"),
-    path(
-        "confirm-profile-update/<str:token>/",
-        views.confirm_profile_update,
-        name="confirm_profile_update",
-    ),
-    path("apply-email-change/", views.apply_email_change, name="apply_email_change"),
-    path(
-        "apply-username-change/",
-        views.apply_username_change,
-        name="apply_username_change",
     ),
 ]

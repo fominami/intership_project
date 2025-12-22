@@ -10,10 +10,8 @@ from django.contrib.auth.tokens import default_token_generator
 from django.utils.encoding import force_str, force_bytes
 from django.core.mail import send_mail
 from django.conf import settings
-from accounts.models import User
 from django.utils.http import urlsafe_base64_encode
 import secrets
-from django.utils.crypto import constant_time_compare
 from accounts.serializers import (
     ProfileSerializer,
     ProfileUpdateSerializer,
@@ -23,8 +21,9 @@ from accounts.serializers import (
     ResetPasswordEmailSerializer,
     ResetPasswordConfirmSerializer,
     UpdateProfileSerializer,
-    ConfirmProfileUpdateSerializer,
 )
+
+User = get_user_model()
 
 
 class ProfileViewSet(viewsets.GenericViewSet):
@@ -59,7 +58,8 @@ class ProfileViewSet(viewsets.GenericViewSet):
         user.is_active = False
         user.save()
         return Response(
-            {"status": "Ваш аккаунт деактивирован"}, status=status.HTTP_204_NO_CONTENT
+            {"status": "Your account has been deactivated."},
+            status=status.HTTP_204_NO_CONTENT,
         )
 
 
@@ -78,9 +78,6 @@ class PublicUserViewSet(
         )
 
 
-User = get_user_model()
-
-
 class RegisterView(generics.CreateAPIView):
     serializer_class = RegisterSerializer
     permission_classes = [AllowAny]
@@ -97,9 +94,9 @@ def confirm_email(request, token):
         user.is_email_verified = True
         user.save()
         cache.delete(f"email_confirm_{token}")
-        return Response({"message": "Email подтвержден!"})
+        return Response({"message": "Email confirmed!"})
     except (User.DoesNotExist, ValueError):
-        return Response({"error": "Неверный токен"}, status=400)
+        return Response({"error": "Invalid token"}, status=400)
 
 
 class ChangePasswordView(generics.UpdateAPIView):
@@ -121,7 +118,7 @@ class ChangePasswordView(generics.UpdateAPIView):
         user.set_password(serializer.validated_data["new_password"])
         user.save()
 
-        return Response({"message": "Пароль успешно изменен"})
+        return Response({"message": "Password changed successfully"})
 
 
 @api_view(["POST"])
@@ -130,7 +127,14 @@ def reset_password_email(request):
     serializer = ResetPasswordEmailSerializer(data=request.data)
     if serializer.is_valid():
         email = serializer.validated_data["email"]
-        user = User.objects.get(email=email)
+
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            return Response(
+                {"error": "User with such email already exist"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
 
         uid = urlsafe_base64_encode(force_bytes(user.pk))
         token = default_token_generator.make_token(user)
@@ -140,13 +144,13 @@ def reset_password_email(request):
 
         reset_link = f"{settings.FRONTEND_URL}/reset-password/{uid}/{token}/"
         send_mail(
-            "Сброс пароля",
+            "Password reset",
             f"Перейдите по ссылке: {reset_link}",
             settings.DEFAULT_FROM_EMAIL,
             [email],
         )
 
-        return Response({"message": "Ссылка для сброса пароля отправлена"})
+        return Response({"message": "Password reset link has been sent."})
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -157,26 +161,22 @@ def reset_password_confirm(request, uidb64, token):
         uid = force_str(urlsafe_base64_decode(uidb64))
         user = User.objects.get(pk=uid)
     except (TypeError, ValueError, OverflowError, User.DoesNotExist):
-        return Response(
-            {"error": "Неверная ссылка"}, status=status.HTTP_400_BAD_REQUEST
-        )
+        return Response({"error": "Invalid link"}, status=status.HTTP_400_BAD_REQUEST)
 
     cached_token = cache.get(f"reset_token_{uidb64}")
     if cached_token != token:
-        return Response({"error": "Неверный токен"}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"error": "Invalid token"}, status=status.HTTP_400_BAD_REQUEST)
 
     serializer = ResetPasswordConfirmSerializer(data=request.data)
     if serializer.is_valid():
         user.set_password(serializer.validated_data["new_password"])
         user.save()
         cache.delete(f"reset_token_{uidb64}")
-        return Response({"message": "Пароль сброшен"})
+        return Response({"message": "Password reset"})
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 class UpdateProfileView(generics.UpdateAPIView):
-    """Запрос на изменение username/email"""
-
     serializer_class = UpdateProfileSerializer
     permission_classes = [IsAuthenticated]
 
@@ -185,98 +185,63 @@ class UpdateProfileView(generics.UpdateAPIView):
         serializer.is_valid(raise_exception=True)
 
         user = request.user
-        changes = {}
 
-        if serializer.validated_data.get("new_email"):
+        if new_email := serializer.validated_data.get("new_email"):
+            cache.set(f"pending_email_{user.id}", new_email, 3600)
             token = secrets.token_urlsafe(32)
             cache.set(f"profile_email_confirm_{token}", user.id, 3600)
             send_mail(
-                "Подтверждение новой почты",
-                f"Подтвердите новый email: {settings.FRONTEND_URL}/confirm-email-change/{token}/",
+                "Confirming new email",
+                f"Подтвердите: {settings.FRONTEND_URL}/confirm-profile-update/{token}/",
                 settings.DEFAULT_FROM_EMAIL,
-                [serializer.validated_data["new_email"]],
+                [new_email],
             )
-            changes["email"] = "Ссылка отправлена"
 
-        if serializer.validated_data.get("new_username"):
+        if new_username := serializer.validated_data.get("new_username"):
+            cache.set(f"pending_username_{user.id}", new_username, 3600)
             token = secrets.token_urlsafe(32)
             cache.set(f"profile_username_confirm_{token}", user.id, 3600)
-            changes["username"] = "Ссылка отправлена"
 
         return Response(
-            {"message": "Ссылки для подтверждения отправлены", "changes": changes}
+            {"message": "Confirmation links have been sent to a new email address."}
         )
 
 
 @api_view(["GET"])
 def confirm_profile_update(request, token):
-    """Подтверждение изменения username/email"""
-    field_token = None
+    """Подтверждение и применение изменений username/email"""
+    email_user_id = cache.get(f"profile_email_confirm_{token}")
+    username_user_id = cache.get(f"profile_username_confirm_{token}")
 
-    # Проверяем email token
-    cached_user_id = cache.get(f"profile_email_confirm_{token}")
-    if cached_user_id:
-        field_token = "email"
-    else:
-        # Проверяем username token
-        cached_user_id = cache.get(f"profile_username_confirm_{token}")
-        if cached_user_id:
-            field_token = "username"
+    user_id = email_user_id or username_user_id
+    field_type = "email" if email_user_id else "username"
 
-    if not field_token or not cached_user_id:
-        return Response({"error": "Неверный токен"}, status=status.HTTP_400_BAD_REQUEST)
+    if not user_id:
+        return Response({"error": "Invalid token"}, status=400)
 
     try:
-        user = User.objects.get(id=cached_user_id)
+        user = User.objects.get(id=user_id)
     except User.DoesNotExist:
-        return Response(
-            {"error": "Пользователь не найден"}, status=status.HTTP_400_BAD_REQUEST
-        )
+        return Response({"error": "User not found"}, status=404)
 
-    cache.set(f"pending_{field_token}_{user.id}", token, 3600)
-    cache.delete(f"profile_{field_token}_confirm_{token}")
+    if field_type == "email":
+        pending_email = cache.get(f"pending_email_{user.id}")
+        if pending_email:
+            user.email = pending_email
+            cache.delete(f"pending_email_{user.id}")
+
+    elif field_type == "username":
+        pending_username = cache.get(f"pending_username_{user.id}")
+        if pending_username:
+            user.username = pending_username
+            cache.delete(f"pending_username_{user.id}")
+
+    user.save()
+    cache.delete(f"profile_{field_type}_confirm_{token}")
 
     return Response(
         {
-            "message": f"{field_token.capitalize()} подтвержден!",
-            "next_step": f"/api/accounts/apply-{field_token}-change/",
+            "message": f"{field_type.capitalize()} successfully updated!",
+            "user_id": user.id,
         }
     )
-
-
-@api_view(["POST"])
-def apply_email_change(request):
-    """Применить изменение email после подтверждения"""
-    serializer = ConfirmProfileUpdateSerializer(data=request.data)
-    if not serializer.is_valid():
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-    token = serializer.validated_data["token"]
-    cached_token = cache.get(f"pending_email_{request.user.id}")
-
-    if not constant_time_compare(token, cached_token):
-        return Response(
-            {"error": "Токен не подтвержден"}, status=status.HTTP_400_BAD_REQUEST
-        )
-
-    cache.delete(f"pending_email_{request.user.id}")
-    return Response({"message": "Email обновлен!"})
-
-
-@api_view(["POST"])
-def apply_username_change(request):
-    """Применить изменение username после подтверждения"""
-    serializer = ConfirmProfileUpdateSerializer(data=request.data)
-    if not serializer.is_valid():
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-    token = serializer.validated_data["token"]
-    cached_token = cache.get(f"pending_username_{request.user.id}")
-
-    if not constant_time_compare(token, cached_token):
-        return Response(
-            {"error": "Токен не подтвержден"}, status=status.HTTP_400_BAD_REQUEST
-        )
-
-    cache.delete(f"pending_username_{request.user.id}")
-    return Response({"message": "Username обновлен!"})

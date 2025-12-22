@@ -1,7 +1,9 @@
 from rest_framework import serializers
-from accounts.models import User
 from django.contrib.auth.password_validation import validate_password
 from django.contrib.auth import get_user_model
+
+
+User = get_user_model()
 
 
 class ProfileSerializer(serializers.ModelSerializer):
@@ -18,7 +20,7 @@ class ProfileUpdateSerializer(serializers.ModelSerializer):
     def validate_email(self, value):
         user = self.context["request"].user
         if User.objects.filter(email=value).exclude(id=user.id).exists():
-            raise serializers.ValidationError("Этот email уже используется")
+            raise serializers.ValidationError("email already exist")
         return value
 
 
@@ -26,9 +28,6 @@ class PublicUserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ("id", "username", "first_name", "last_name", "role")
-
-
-User = get_user_model()
 
 
 class RegisterSerializer(serializers.ModelSerializer):
@@ -52,17 +51,12 @@ class ChangePasswordSerializer(serializers.Serializer):
     def validate_old_password(self, value):
         user = self.context["request"].user
         if not user.check_password(value):
-            raise serializers.ValidationError("Старый пароль неверный")
+            raise serializers.ValidationError("The old password is incorrect.")
         return value
 
 
 class ResetPasswordEmailSerializer(serializers.Serializer):
     email = serializers.EmailField()
-
-    def validate_email(self, value):
-        if not User.objects.filter(email=value).exists():
-            raise serializers.ValidationError("Пользователь с таким email не найден")
-        return value
 
 
 class ResetPasswordConfirmSerializer(serializers.Serializer):
@@ -73,8 +67,10 @@ class ResetPasswordConfirmSerializer(serializers.Serializer):
 
 class UpdateProfileSerializer(serializers.ModelSerializer):
     new_email = serializers.EmailField(required=False, allow_blank=True)
-    new_username = serializers.CharField(required=False, allow_blank=True)
-    current_password = serializers.CharField(required=True)
+    new_username = serializers.CharField(
+        required=False, allow_blank=True, max_length=150
+    )
+    current_password = serializers.CharField(required=True, min_length=8)
 
     class Meta:
         model = User
@@ -83,7 +79,7 @@ class UpdateProfileSerializer(serializers.ModelSerializer):
     def validate_current_password(self, value):
         user = self.context["request"].user
         if not user.check_password(value):
-            raise serializers.ValidationError("Неверный текущий пароль")
+            raise serializers.ValidationError("Current password is incorrect")
         return value
 
     def validate_new_email(self, value):
@@ -93,7 +89,7 @@ class UpdateProfileSerializer(serializers.ModelSerializer):
             .exclude(id=self.context["request"].user.id)
             .exists()
         ):
-            raise serializers.ValidationError("Email уже используется")
+            raise serializers.ValidationError("Email is already in use")
         return value
 
     def validate_new_username(self, value):
@@ -103,7 +99,7 @@ class UpdateProfileSerializer(serializers.ModelSerializer):
             .exclude(id=self.context["request"].user.id)
             .exists()
         ):
-            raise serializers.ValidationError("Username уже используется")
+            raise serializers.ValidationError("Username is already in use")
         return value
 
 

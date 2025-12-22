@@ -1,4 +1,5 @@
 from rest_framework import permissions
+from .models import Promotion
 
 
 class PromotionPermission(permissions.BasePermission):
@@ -40,8 +41,6 @@ class PromotionCarPermission(permissions.BasePermission):
     def _is_promotion_related_to_supplier(self, request, view):
         promotion_id = view.kwargs.get("promotion_pk")
         if promotion_id:
-            from .models import Promotion
-
             try:
                 promotion = Promotion.objects.get(id=promotion_id)
                 return promotion.cars.filter(

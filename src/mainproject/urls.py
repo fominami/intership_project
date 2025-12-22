@@ -9,7 +9,7 @@ schema_view = get_schema_view(
     openapi.Info(
         title="Internship API",
         default_version="v1",
-        description="API для стажировки",
+        description="API for internship project",
     ),
     public=True,
     permission_classes=(permissions.AllowAny,),

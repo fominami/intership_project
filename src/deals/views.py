@@ -39,9 +39,13 @@ class DealViewSet(
     def get_queryset(self):
         queryset = super().get_queryset()
         user = self.request.user
+
+        if not user.is_authenticated:
+            return queryset.none()
+
         if not user.is_email_verified and self.request.user.is_authenticated:
             if self.action != "list":
-                raise PermissionDenied("Подтвердите email для создания сделок!")
+                raise PermissionDenied("Confirm your email to create deals!")
 
         if user.is_salon:
             return queryset.filter(salon__user=user)
