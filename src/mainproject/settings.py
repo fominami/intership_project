@@ -33,6 +33,8 @@ INSTALLED_APPS = [
     "drf_yasg",
     "debug_toolbar",
     "django_filters",
+    "django_celery_beat",
+    "django_celery_results",
     "accounts",
     "common",
     "cars",
@@ -162,3 +164,13 @@ AUTH_USER_MODEL = "accounts.User"
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 DEFAULT_FROM_EMAIL = "test@example.com"
 FRONTEND_URL = "http://localhost:3000"
+
+CELERY_BROKER_URL = "redis://redis:6379/0"
+CELERY_RESULT_BACKEND = "redis://redis:6379/0"
+CELERY_ACCEPT_CONTENT = ["json"]
+CELERY_TASK_SERIALIZER = "json"
+CELERY_RESULT_SERIALIZER = "json"
+CELERY_TIMEZONE = "Europe/Minsk"
+
+CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
+CELERY_BEAT_MAX_LOOP_INTERVAL = 10
