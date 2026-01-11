@@ -39,6 +39,32 @@ services:
     networks:
       - app-network
 
+  celery:
+    build: .
+    command: celery -A mainproject worker --loglevel=info
+    volumes:
+      - ./src:/app
+    env_file:
+      - .env
+    depends_on:
+      - redis
+      - db
+    networks:
+      - app-network
+
+  celery-beat:
+    build: .
+    command: celery -A mainproject beat --loglevel=info
+    volumes:
+      - ./src:/app
+    env_file:
+      - .env
+    depends_on:
+      - redis
+      - db
+    networks:
+      - app-network
+
 volumes:
   postgres_data:
   redis_data:
