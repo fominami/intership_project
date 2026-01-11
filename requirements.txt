@@ -15,7 +15,7 @@ inflection==0.5.1
 marshmallow==4.1.0
 nodeenv==1.9.1
 packaging==25.0
-platformdirs==4.5.0зш
+platformdirs==4.5.0
 pre_commit==4.4.0
 psycopg2-binary==2.9.11
 PyJWT==2.10.1
@@ -28,3 +28,5 @@ sqlparse==0.5.3
 tzdata==2025.2
 uritemplate==4.2.0
 virtualenv==20.35.4
+django-filter>=23.0
+ruff>=0.1.0

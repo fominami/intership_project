@@ -1,6 +1,13 @@
-from django.urls import path
-from . import views
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
+from .views import SalonViewSet, SalonCarViewSet
+
+router = DefaultRouter()
+router.register("salons", SalonViewSet)
+router.register(
+    "salons/(?P<salon_pk>[^/.]+)/cars", SalonCarViewSet, basename="salon-cars"
+)
 
 urlpatterns = [
-    path("test/", views.test_api, name="test_api"),
+    path("", include(router.urls)),
 ]
