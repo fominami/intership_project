@@ -3,6 +3,11 @@ from django.db.models import Max, F, Sum
 from django.db import transaction
 from decimal import Decimal
 from django.utils import timezone
+from salons.models import Salon
+from salons.models import SalonCar
+from cars.models import Car
+from suppliers.models import SupplierCar
+from promotions.models import PromotionSalon
 import logging
 
 logger = logging.getLogger(__name__)
@@ -11,8 +16,6 @@ logger = logging.getLogger(__name__)
 @shared_task
 def analyze_demand_and_buy():
     logger.info("=== STARTING DEMAND ANALYSIS ===")
-
-    from salons.models import Salon
 
     active_salons = Salon.objects.filter(is_active=True).select_related("user")
     logger.info(f"Salons found: {active_salons.count()}")
@@ -55,9 +58,6 @@ def analyze_demand_and_buy():
 
 
 def get_models_to_buy(salon):
-    from salons.models import SalonCar
-    from cars.models import Car
-
     models_to_buy = {}
 
     salon_cars = (
@@ -91,9 +91,6 @@ def get_models_to_buy(salon):
 
 
 def get_best_supplier_offer(salon, car, quantity):
-    from suppliers.models import SupplierCar
-    from promotions.models import PromotionSalon
-
     supplier_offers = SupplierCar.objects.filter(
         car_id=car.id, is_active=True
     ).select_related("supplier")
@@ -151,8 +148,6 @@ def log_no_purchase(car, quantity, reason):
 
 @transaction.atomic
 def create_purchase_transaction(salon, best_offer):
-    from salons.models import SalonCar
-
     car = best_offer["supplier_car"].car
     quantity = best_offer["quantity"]
     total_cost = best_offer["total_cost"]

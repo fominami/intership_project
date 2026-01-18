@@ -4,6 +4,12 @@ from django.utils import timezone
 from decimal import Decimal
 import logging
 from django.db import transaction
+from clients.models import Client
+from salons.models import Salon
+from promotions.models import PromotionSalon
+from suppliers.models import SupplierCar
+from salons.models import SalonCar, BestSupplierForSalon
+from deals.models import Deal
 
 logger = logging.getLogger(__name__)
 
@@ -11,8 +17,6 @@ logger = logging.getLogger(__name__)
 @shared_task
 def process_pending_deals():
     logger.info("=== Deal processing ===")
-
-    from clients.models import Client
 
     active_clients = (
         Client.objects.filter(
@@ -31,7 +35,9 @@ def process_pending_deals():
 
     for client in active_clients:
         if not check_client_eligible(client):
-            logger.warning(f"  {client.user.username}: problems ")
+            logger.warning(
+                f"Client `{client.user.username}` is not eligible: validation checks failed"
+            )
             continue
 
         logger.info(f"\nClient: {client.user.username} (ID: {client.id})")
@@ -74,7 +80,6 @@ def check_client_eligible(client):
         logger.warning(f"Balance is empty: ${client.balance:.2f}")
         return False
 
-    logger.info("No problem with client")
     return True
 
 
@@ -98,10 +103,6 @@ def get_client_preferred_cars(client):
 
 
 def find_suitable_salons(car_id, max_price):
-    from salons.models import Salon
-    from promotions.models import PromotionSalon
-    from suppliers.models import SupplierCar
-
     suitable_salons = (
         Salon.objects.filter(
             Q(is_active=True) & Q(saloncar__car_id=car_id) & Q(saloncar__count__gt=0)
@@ -171,8 +172,6 @@ def find_suitable_salons(car_id, max_price):
 
 
 def select_best_salon(client, suitable_salons):
-    from salons.models import Salon
-
     if not suitable_salons:
         return None
 
@@ -198,9 +197,6 @@ def select_best_salon(client, suitable_salons):
 
 @transaction.atomic
 def process_deal(client, salon):
-    from salons.models import SalonCar, BestSupplierForSalon
-    from deals.models import Deal
-
     try:
         best_supplier = (
             BestSupplierForSalon.objects.filter(Q(salon=salon) & Q(is_active=True))

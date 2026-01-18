@@ -1,9 +1,14 @@
 from celery import shared_task
+from django.db import models
 from django.db.models import Q, Prefetch, Max, Value
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 from decimal import Decimal
 import logging
+from salons.models import Salon
+from cars.models import Car
+from suppliers.models import SupplierCar
+from promotions.models import PromotionSalon
 
 logger = logging.getLogger(__name__)
 
@@ -11,10 +16,6 @@ logger = logging.getLogger(__name__)
 @shared_task
 def update_best_suppliers_for_salons():
     logger.info("=== Checking active suppliers ===")
-
-    from salons.models import Salon
-    from cars.models import Car
-    from suppliers.models import SupplierCar
 
     # Получаем активные салоны
     active_salons = (
@@ -90,7 +91,6 @@ def update_best_suppliers_for_salons():
 
 def get_best_supplier_offer_for_salon(salon, car):
     """Получаем лучшее предложение + актуальные скидки"""
-    from promotions.models import PromotionSalon
 
     supplier_offers = car.suppliercar_set.all()
 
@@ -133,9 +133,14 @@ def get_best_supplier_offer_for_salon(salon, car):
     return best_offer
 
 
+class SupplierChangeReason(models.TextChoices):
+    INITIAL = "initial", "Initial supplier selection"
+    PRICE = "price", "Better base price"
+    PROMOTION = "promotion", "Better price due to promotion"
+
+
 def determine_supplier_change_reason(salon, car, best_offer):
     """Определяем причину изменения поставщика"""
-    from suppliers.models import SupplierCar
 
     active_suppliers = (
         SupplierCar.objects.filter(
@@ -147,7 +152,7 @@ def determine_supplier_change_reason(salon, car, best_offer):
     )
 
     if not active_suppliers.exists():
-        return "initial"
+        return SupplierChangeReason.INITIAL
 
     min_price = None
     for supplier in active_suppliers:
@@ -157,19 +162,12 @@ def determine_supplier_change_reason(salon, car, best_offer):
 
     if best_offer["final_price"] <= min_price:
         if best_offer["salon_promo_discount"] > Decimal("0.00"):
-            return "promotion"
-        return "price"
-
-    return "price"
+            return SupplierChangeReason.PROMOTION
+        return SupplierChangeReason.PRICE
+    return SupplierChangeReason.PRICE
 
 
 def log_supplier_update(salon, car, best_offer, reason):
-    reason_display = {
-        "initial": "Start",
-        "promotion": "Best promotion",
-        "price": "Lower price",
-    }
-
     logger.info(f"   {car.brand} {car.model}:")
     logger.info(f"     Supplier: {best_offer['supplier_name']}")
     logger.info(
@@ -178,4 +176,4 @@ def log_supplier_update(salon, car, best_offer, reason):
     logger.info(
         f"     Salon's promotion: {best_offer['salon_promo_discount'] * 100:.1f}%"
     )
-    logger.info(f"     Reason: {reason_display.get(reason, reason)}")
+    logger.info(f"     Reason: {reason.label}")
