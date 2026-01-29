@@ -1,15 +1,17 @@
 from celery import shared_task
-from django.db.models import F, Q, Prefetch, Count
-from django.utils import timezone
-from decimal import Decimal
+from django.db.models import F, Q
 import logging
 from django.db import transaction
 from clients.models import Client
-from salons.models import Salon
-from promotions.models import PromotionSalon
-from suppliers.models import SupplierCar
 from salons.models import SalonCar, BestSupplierForSalon
 from deals.models import Deal
+from clients.blogic import (
+    check_client_eligible,
+    get_client_preferred_cars,
+    find_suitable_salons,
+    select_best_salon,
+)
+
 
 logger = logging.getLogger(__name__)
 
@@ -66,133 +68,23 @@ def process_pending_deals():
             deal = process_deal(client, chosen_salon)
 
             if deal:
-                log_deal_success(client, chosen_salon, deal)
+                logger.info(
+                    "Successful completed:\n"
+                    f"Client: {client.user.username}\n"
+                    f"Salon: {chosen_salon.name}\n"
+                    f"Car: {deal.car.brand} {deal.car.model}\n"
+                    f"Supplier: {deal.supplier.name}\n"
+                    f"Sum: ${deal.sum:.2f}\n"
+                    f"Deal id: {deal.id}\n"
+                    f"Client balance: ${client.balance:.2f}\n"
+                    f"Salon balance: ${chosen_salon.balance:.2f}"
+                )
                 total_successful += 1
 
             total_processed += 1
 
     logger.info(f"\nResult: processed {total_processed}, successful {total_successful}")
     return {"processed": total_processed, "successful": total_successful}
-
-
-def check_client_eligible(client):
-    if client.balance <= Decimal("0.00"):
-        logger.warning(f"Balance is empty: ${client.balance:.2f}")
-        return False
-
-    return True
-
-
-def get_client_preferred_cars(client):
-    preferences = client.preferences.filter(
-        Q(is_active=True) & Q(category="preferred_car")
-    )
-
-    preferred_cars = []
-
-    for pref in preferences:
-        try:
-            car_id, max_price = pref.value.split(":")
-            max_price = Decimal(max_price)
-            preferred_cars.append((car_id, max_price))
-        except ValueError:
-            logger.warning(f"Problems with preference: {pref.value}")
-            continue
-
-    return preferred_cars
-
-
-def find_suitable_salons(car_id, max_price):
-    suitable_salons = (
-        Salon.objects.filter(
-            Q(is_active=True) & Q(saloncar__car_id=car_id) & Q(saloncar__count__gt=0)
-        )
-        .distinct()
-        .select_related("user")
-        .prefetch_related(
-            Prefetch(
-                "best_suppliers",
-                queryset=SupplierCar.objects.filter(
-                    Q(is_active=True) & Q(car_id=car_id)
-                ).select_related("supplier"),
-            ),
-            Prefetch(
-                "salon_promotions",
-                queryset=PromotionSalon.objects.filter(
-                    Q(is_active=True)
-                    & Q(promotion__is_active=True)
-                    & Q(promotion__started_at__lte=timezone.now())
-                    & Q(promotion__ended_at__gte=timezone.now())
-                ).select_related("promotion"),
-            ),
-            "deals",
-        )
-        .annotate(
-            successful_sales_count=Count("deals", filter=Q(deals__is_active=True))
-        )
-        .values_list(
-            "id",
-            "name",
-            "best_suppliers__final_price",
-            "successful_sales_count",
-            "salon_promotions__discount",
-            flat=False,
-        )
-    )
-
-    results = []
-
-    for (
-        salon_id,
-        salon_name,
-        final_price,
-        sales_count,
-        promo_discount,
-    ) in suitable_salons:
-        if final_price is None:
-            continue
-
-        final_price = Decimal(str(final_price))
-
-        if final_price > max_price:
-            continue
-
-        results.append(
-            {
-                "salon_id": salon_id,
-                "salon_name": salon_name,
-                "price": final_price,
-                "successful_sales": sales_count or 0,
-                "has_promotion": promo_discount is not None,
-                "promo_discount": Decimal(str(promo_discount or "0.00")),
-            }
-        )
-
-    return results
-
-
-def select_best_salon(client, suitable_salons):
-    if not suitable_salons:
-        return None
-
-    def salon_sort_key(salon):
-        return (salon["price"], not salon["has_promotion"], -salon["successful_sales"])
-
-    sorted_salons = sorted(suitable_salons, key=salon_sort_key)
-    best_salon_data = sorted_salons[0]
-
-    salon = (
-        Salon.objects.filter(id=best_salon_data["salon_id"])
-        .select_related("user")
-        .first()
-    )
-
-    logger.info(f"Salon: {best_salon_data['salon_name']}")
-    logger.info(f"Price: ${best_salon_data['price']:.2f}")
-    logger.info(f"Promotion: {'Yes' if best_salon_data['has_promotion'] else 'No'}")
-    logger.info(f"Successful sales: {best_salon_data['successful_sales']}")
-
-    return salon
 
 
 @transaction.atomic
@@ -211,29 +103,29 @@ def process_deal(client, salon):
         car = best_supplier.car
         final_price = best_supplier.final_price
 
-        # Проверка баланса клиента
+        # Сheck client's balance
         if client.balance < final_price:
             logger.warning(
                 f" Small balance: ${client.balance:.2f} < ${final_price:.2f}"
             )
             return None
 
-        # Уменьшаем баланс клиента
+        # reduce client's balance
         client.balance = F("balance") - final_price
         client.save()
         client.refresh_from_db()
 
-        # Уменьшаем количество в салоне
+        # reduce count in salon
         salon_car = SalonCar.objects.get(salon=salon, car=car)
         salon_car.count = F("count") - 1
         salon_car.save()
 
-        # Увеличиваем баланс салона
+        # increasing the salon balance
         salon.balance = F("balance") + final_price
         salon.save()
         salon.refresh_from_db()
 
-        # Создаем Deal
+        # Create Deal
         deal = Deal.objects.create(
             salon=salon,
             car=car,
@@ -242,22 +134,10 @@ def process_deal(client, salon):
             sum=final_price,
         )
 
-        logger.info(f"Deal was created: ID {deal.id}, сумма ${final_price:.2f}")
+        logger.info(f"Deal was created: ID {deal.id}, sum ${final_price:.2f}")
 
         return deal
 
     except Exception as e:
-        logger.error(f" Errir in deal: {str(e)}")
+        logger.error(f" Error in deal: {str(e)}")
         return None
-
-
-def log_deal_success(client, salon, deal):
-    logger.info("Successful complited:")
-    logger.info(f" Client: {client.user.username}")
-    logger.info(f"Salon: {salon.name}")
-    logger.info(f"Car: {deal.car.brand} {deal.car.model}")
-    logger.info(f"Supplier: {deal.supplier.name}")
-    logger.info(f"Sum: ${deal.sum:.2f}")
-    logger.info(f"deal's id: {deal.id}")
-    logger.info(f"client's balance : ${client.balance:.2f}")
-    logger.info(f"salon's balance: ${salon.balance:.2f}")
