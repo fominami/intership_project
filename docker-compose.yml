@@ -7,13 +7,28 @@ services:
     command: python manage.py runserver 0.0.0.0:8000
     volumes:
       - ./src:/app
+      - static_volume:/app/static
+      - media_volume:/app/media
     ports:
-      - "8000:8000"
+      - "8000"
     env_file:
       - .env
     depends_on:
       - db
       - redis
+    networks:
+      - app-network
+  nginx:
+    image: nginx:alpine
+    container_name: nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d
+      - static_volume:/app/static
+      - media_volume:/app/media
+    depends_on:
+      - web
     networks:
       - app-network
 
@@ -39,9 +54,37 @@ services:
     networks:
       - app-network
 
+  celery:
+    build: .
+    command: celery -A mainproject worker --loglevel=info
+    volumes:
+      - ./src:/app
+    env_file:
+      - .env
+    depends_on:
+      - redis
+      - db
+    networks:
+      - app-network
+
+  celery-beat:
+    build: .
+    command: celery -A mainproject beat --loglevel=info
+    volumes:
+      - ./src:/app
+    env_file:
+      - .env
+    depends_on:
+      - redis
+      - db
+    networks:
+      - app-network
+
 volumes:
   postgres_data:
   redis_data:
+  static_volume:
+  media_volume:
 
 networks:
   app-network:
